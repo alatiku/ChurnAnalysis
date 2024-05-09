@@ -1,0 +1,778 @@
+---
+title: "Churn Analysis"
+subtitle: "On IBM Telco Data" 
+author: "Aliyu Atiku Mustapha"
+date: "2023-10-24"
+format:
+  html:
+    toc: true
+    toc_float: true
+    toc-location: left
+    toc_depth: 3
+    number_sections: true
+    code-fold: true
+    code-summary: "Click to show code"
+    grid:
+      body-width: 1050px
+      sidebar-width: 250px
+      margin-width:	200px
+    include-in-header:
+      - file: github-corner.html
+editor: visual
+theme:
+  light: flatly
+  dark: darkly
+---
+
+# Churn Analysis on IBM Telco Customer Data[^1]
+
+[^1]: Click the GitHub icon on the top right corner of the page to view all the project files including the dataset.
+
+## IBM Telco Data
+
+The data is from a fictional telco company that provided home phone and Internet services to 7043 customers in California in Q3 The data has 7043 measurements of 33 different variables.
+
+The dataset is available on [Kaggle](https://www.kaggle.com/datasets/yeanzc/telco-customer-churn-ibm-dataset). The data has the following columns and their descriptions:
+
+| Column Name       | Column Description                                                                                                                                                                                          |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| CustomerID        | A unique ID that identifies each customer                                                                                                                                                                   |
+| Count             | A value used in reporting/dashboarding to sum up the number of customers in a filtered set                                                                                                                  |
+| Country           | The country of the customer’s primary residence                                                                                                                                                             |
+| State             | The state of the customer’s primary residence                                                                                                                                                               |
+| City              | The city of the customer’s primary residence                                                                                                                                                                |
+| Zip Code          | The zip code of the customer’s primary residence                                                                                                                                                            |
+| Lat Long          | The combined latitude and longitude of the customer’s primary residence                                                                                                                                     |
+| Latitude          | The latitude of the customer’s primary residence                                                                                                                                                            |
+| Longitude         | The longitude of the customer’s primary residence                                                                                                                                                           |
+| Gender            | The customer’s gender                                                                                                                                                                                       |
+| Senior Citizen    | Indicates if the customer is 65 or older - Yes or No                                                                                                                                                        |
+| Partner           | Indicate if the customer has a partner - Yes or No                                                                                                                                                          |
+| Dependents        | Indicates if the customer lives with any dependents - Yes or No                                                                                                                                             |
+| Tenure Months     | Indicates the total amount of months that the customer has been with the company by the end of the quarter specified above                                                                                  |
+| Phone Service     | Indicates if the customer subscribes to home phone service with the company - Yes or No                                                                                                                     |
+| Multiple Lines    | Indicates if the customer subscribes to multiple telephone lines with the company - Yes or No                                                                                                               |
+| Internet Service  | Indicates if the customer subscribes to Internet service with the company - No, DSL, Fiber Optic, Cable                                                                                                     |
+| Online Security   | Indicates if the customer subscribes to an additional online security service provided by the company - Yes or No                                                                                           |
+| Online Backup     | Indicates if the customer subscribes to an additional online backup service provided by the company - Yes or No                                                                                             |
+| Device Protection | Indicates if the customer subscribes to an additional device protection plan for their Internet equipment provided by the company - Yes or No                                                               |
+| Tech Support      | Indicates if the customer subscribes to an additional technical support plan from the company with reduced wait times - Yes or No                                                                           |
+| Streaming TV      | Indicates if the customer uses their Internet service to stream television programing from a third party provider - Yes or No                                                                               |
+| Streaming Movies  | Indicates if the customer uses their Internet service to stream movies from a third party provider - Yes or No                                                                                              |
+| Contract          | Indicates the customer’s current contract type - Month-to-Month, One Year, Two Year                                                                                                                         |
+| Paperless Billing | Indicates if the customer has chosen paperless billing - Yes or No                                                                                                                                          |
+| Payment Method    | Indicates how the customer pays their bill - Bank Withdrawal, Credit Card, Mailed Check                                                                                                                     |
+| Monthly Charge    | Indicates the customer’s current total monthly charge for all their services from the company                                                                                                               |
+| Total Charges     | Indicates the customer’s total charges, calculated to the end of the quarter specified above                                                                                                                |
+| Churn Label       | Yes = the customer left the company this quarter No = the customer remained with the company Directly related to Churn Value                                                                                |
+| Churn Value       | 1 = the customer left the company this quarter 0 = the customer remained with the company Directly related to Churn Label                                                                                   |
+| Churn Score       | A value from 0-100 that is calculated using the predictive tool IBM SPSS Modeler The model incorporates multiple factors known to cause churn The higher the score, the more likely the customer will churn |
+| CLTV              | Customer Lifetime Value A predicted CLTV is calculated using corporate formulas and existing data The higher the value, the more valuable the customer High value customers should be monitored for churn   |
+| Churn Reason      | A customer’s specific reason for leaving the company Directly related to Churn Category                                                                                                                     |
+
+```{r setup, message=FALSE, warning=FALSE}
+# Load all required packages
+# Load tidyverse package for data analysis
+library(tidyverse)
+# Load readxl package for reading excel file
+library(readxl)
+# Load rsample package for modeling
+library(rsample)
+# Load naniar package for imputation
+library(naniar)
+# Load corrplot package for correlation plot
+library(corrplot)
+# Load gridExtra package for combining plots
+library(gridExtra)
+# Load gbm package for Logistic regression modeling
+library(gbm)
+# Load randomForest package for Logistic regression modeling
+library(randomForest)
+# Load pROC package for modeling
+library(pROC)
+# Load rpart package for Random Forest modeling
+library(rpart)
+# Load ROCR package
+library(ROCR)
+# Load DT package for table display
+library(DT)
+# Load the leaflet package for map charts
+library(leaflet)
+# Set default theme
+theme_set(theme_minimal())
+```
+
+## Data Loading
+
+```{r, read_files, message=FALSE, warning=FALSE}
+telco_data <- read_excel("Telco_customer_churn_data.xlsx")
+```
+
+The telco dataset has `r nrow(telco_data)` rows. Lets view the data to understand its structure and composition.
+
+```{r, display_data, message=FALSE, warning=FALSE}
+# Display the first 500 rows of imported data
+datatable(
+  telco_data[1:500,],
+  filter = "top",
+  caption = "The first 500 rows of loaded data.",
+  options = list(pageLength = 50,
+                 scrollY = "500px",
+                 scrollX = TRUE))
+```
+
+## Data Properties
+
+To understand the data composition, the class of each variable together with the number and proportion of missing values for each variable will provide a deeper insight to the data structure and how it could be useful for analysis.
+
+```{r data_str, message=FALSE, warning=FALSE}
+# Check for class of each variable
+class_table <- sapply(telco_data, class)
+class_table <- data.frame(
+  Variable = names(class_table),
+  Class = as.character(class_table),
+  stringsAsFactors = FALSE)
+# Check for the proportion of missing values in full data
+x <- data.frame(miss = colSums(is.na(telco_data)), 
+             prop = round((colSums(is.na(telco_data)) / nrow(telco_data)) * 100, 
+                           2))
+properties <- cbind(class_table,
+                    Values_missing = x[, 1],
+                    Proportion_missing = x[, 2])
+# Display the properties of the data
+datatable(
+  properties,
+  options = list(pageLength = 33,
+                 scrollY = "500px"),
+  caption = "Table displaying the properties of the data.")
+```
+
+Note: Data has 2 variables with missing values.
+
+The variable 'Churn Reason' has a high proportion of missing values, 73.46% and will be dropped from the data, while the variable 'Total Charges' will be imputed with the mean value because it has less than 0.15% missing to avoid dropping any rows.
+
+Imputing by the mean on a small number of missing values (11 rows to be precise) will not skew the data.
+
+## Data Cleaning and Processing
+
+```{r clean_data, message=FALSE, warning=FALSE}
+# Step 1: Drop non-required variables in data
+telco_cleaned <- telco_data %>%
+  select(
+    -CustomerID, # Does not provide any insights to churning
+    -Count, # Same value no variation
+    -Country, # Same value no variation
+    -State, # Same value no variation
+    - City, # Duplicate as Zip Code could serve same purpose
+    -`Lat Long`, # Duplicate that includes Latitude and Longitude
+    -`Churn Value`, # Replicate of Churn Label
+    -`Churn Reason` # High proportion of missing values
+  )
+# Step 2: Rename variables using underscore instead of space
+names(telco_cleaned) <- c("Zip_Code", "Latitude",
+                          "Longitude", "Gender", "Senior_Citizen",
+                          "Partner", "Dependents", "Tenure_Months",
+                          "Phone_Service", "Multiple_Lines",
+                          "Internet_Service", "Online_Security",
+                          "Online_Backup", "Device_Protection",
+                          "Tech_Support", "Streaming_TV",
+                          "Streaming_Movies", "Contract",
+                          "Paperless_Billing", "Payment_Method",
+                          "Monthly_Charges", "Total_Charges", 
+                          "Churn_Label", "Churn_Score", "CLTV")
+# Step 3: Impute missing values for Total_Charges variable with the mean value 
+telco_cleaned$Total_Charges <- impute_mean(telco_cleaned$Total_Charges)
+# Step 4: Convert all categorical variables from character to factor
+# Group all character variables
+cat_variables <- c("Gender", "Senior_Citizen", "Partner", "Dependents",
+                  "Phone_Service", "Multiple_Lines", "Internet_Service",
+                  "Online_Security", "Online_Backup", "Device_Protection",
+                  "Tech_Support", "Streaming_TV", "Streaming_Movies", 
+                  "Contract", "Paperless_Billing", "Payment_Method",
+                  "Churn_Label")
+# Convert from character variables to factor variables
+telco_cleaned[cat_variables] <- lapply(telco_cleaned[cat_variables], 
+                                       as.factor)
+
+# Step 5: Encode binary variables from Yes/No to 1/0
+# Group all binary variables
+bin_variable <- c("Senior_Citizen", "Partner", "Dependents",
+                  "Phone_Service", "Multiple_Lines", "Online_Security",
+                  "Online_Backup", "Device_Protection", "Tech_Support",
+                  "Streaming_TV", "Streaming_Movies", "Paperless_Billing",
+                  "Churn_Label")
+# Convert from binary variables to numeric values
+telco_cleaned[bin_variable] <- lapply(telco_cleaned[bin_variable],
+                                      function(z) ifelse(z == "Yes", 1, 0))
+# Display the first 500 rows of the cleaned and reformatted data
+datatable(
+   telco_cleaned[1:500,],
+   caption = "First 500 rows of cleaned data with new created variables.",
+   options = list(pageLength = 50,
+                 scrollY = "500px",
+                 scrollX = TRUE))
+```
+
+The Telco data undergoes thorough cleaning: unnecessary variables are dropped, columns are renamed using underscores instead of spaces for clarity, missing values in 'Total_Charges' are imputed with the mean value, categorical variables are converted to factors, and binary variables are encoded as 1s and 0s.
+
+CustomerID is removed because it doesn't provide insights into churning behavior. Count, Country, State, and City are eliminated due to their lack of variation in values. The column "Lat Long" is discarded because it duplicates information found in the Latitude and Longitude columns. "Churn Value" is removed as it replicates the information in the Churn Label column. Finally, "Churn Reason" is excluded due to a high proportion of missing values.
+
+------------------------------------------------------------------------
+
+# Churn Analysis
+
+The purpose of this analysis is to answer 5 business questions using the IBM Telco Dataset.
+
+1.  What is the distribution of churn among all customers?
+
+2.  Can we identify patterns or behaviors that precede customer churn?
+
+3.  Which customer segments have the highest churn rates?
+
+4.  Are there specific products or services associated with higher churn rates?
+
+5.  Can we predict which customers are likely to churn in the near future?
+
+To take advantage of the geospatial information present in the Telco data, it will be beneficial to visualize the churn data on a map before analysis. This can help identify clusters of high or low churn rates, revealing regional patterns in customer behavior or service quality, thus providing valuable insights.
+
+```{r churn_map, message=FALSE, warning=FALSE}
+# Filter the dataset to include only churned customers
+churned_customers <- telco_data[telco_data$`Churn Label` == "Yes",]
+leaflet(data = churned_customers) %>%
+    addTiles() %>%  # Add default OpenStreetMap tiles as basemap
+    addCircleMarkers(
+        ~Longitude, ~Latitude,  # Specify Longitude and Latitude columns
+        radius = 1,  # Adjust the radius of the bubbles as needed
+        color = "red",  # Set color of the bubbles to red
+        fillOpacity = 0.2,  # Adjust the opacity of the bubbles
+        # Display in popup
+        popup = ~paste("City:", City,
+                       "<br>Zip Code:", `Zip Code`,
+                       "<br>Gender:", Gender,
+                       "<br>Senior Citizen:", `Senior Citizen`,
+                       "<br>Partner:", Partner,
+                       "<br>Dependents:", Dependents,
+                       "<br>Tenure Months:", `Tenure Months`),
+        # Display CustomerID as label on markers
+        label = ~CustomerID) %>%
+    addLegend(
+        "bottomleft",  # Position of the legend
+        colors = "red",  # Color for the legend
+        labels = "Churned",  # Label for the legend
+        title = "Churn Label"  # Title for the legend
+    )
+```
+
+### What is the distribution of churn among all customers?
+
+```{r churn_analysis1, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+# Churn Distribution
+churn_rate <- telco_cleaned %>%
+    count(Churn_Label) %>%
+    mutate(Customer_proportion = round(n / sum(n) * 100, 0))
+# Plot churn distribution
+ggplot(churn_rate, aes(x = factor(Churn_Label, 
+                                  labels = c("Didn't Churn", "Churned")), 
+                       y = n, 
+                       fill = factor(Churn_Label))) +
+    geom_col() +
+    labs(title = "Churn Distribution for all Customers",
+         x = "Churn Label",
+         y = "Number of Customers") +
+    geom_text(aes(label = paste0(round(Customer_proportion, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("Didn't Churn", "Churned"),
+                      guide = FALSE)  +
+        theme(axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18))
+```
+
+`r churn_rate[2, 2]` customers have churned resulting in a churn rate of approximately `r churn_rate[2, 3]`%, which is considerably high.
+
+### Can we identify patterns or behaviors that precede customer churn?
+
+To do that, the data needs to only include churned customers, by focusing solely on this subset, further analysis can reveal which factors are uniquely associated with churn.
+
+```{r churn_analysis2, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+# Create a subset of data for customers who churned
+churned_customers <- telco_cleaned %>%
+    filter(Churn_Label == 1)
+# Analyze Contract Type by churn
+d1 <- ggplot(churned_customers, aes(x = Contract, fill = Contract)) +
+        geom_bar() +
+        labs(title = "Contract Type of Churned Customers", 
+             x = "Contract", y = "Number of Customers") +
+        theme(legend.position = "none",
+              axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18))
+# Analyze Tenure Months by churn
+d2 <- ggplot(churned_customers, aes(x = Tenure_Months)) +
+        geom_histogram(binwidth = 1,
+                       fill = "blue",
+                       color = "black") +
+        labs(title = "Tenure of Churned Customers",
+             x = "Tenure in Months", y = "Number of Customers") +
+        theme(axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18))
+# Analyze Internet Service Type by churn
+d3 <- ggplot(churned_customers,
+             aes(x = Internet_Service, fill = Internet_Service)) +
+        geom_bar() +
+        labs(title = "Internet Service of Churned Customers", 
+             x = "Internet Service", y = "Number of Customers") +
+        theme(legend.position = "none",
+              axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18))
+# Analyze Payment Method Type by churn
+d4 <- ggplot(churned_customers,
+       aes(x = Payment_Method, fill = Payment_Method)) +
+    geom_bar() +
+    labs(title = "Payment Method of Churned Customers", 
+         x = "Payment Method", y = "Number of Customers") +
+    scale_x_discrete(labels=c("Bank Transfer\n(automatic)", 
+                                "Credit Card\n(automatic)",
+                                "Electronic\nCheck",
+                               "Mailed\nCheck")) +
+    theme(legend.position = "none",
+              axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18)) 
+# Print charts
+grid.arrange(d1, d2, d3, d4, ncol = 2)
+```
+
+From the charts above, it's evident that a significant portion of churned customers opt for month-to-month contracts, fiber-optic internet service, and pay by electronic check. These behaviors could serve as key indicators for tracking churn. Additionally, the initial 5 months of a customer's tenure represent a critical period for customer retention.
+
+### Which customer segments have the highest churn rates?
+
+Explore Churn rates across customer demographics, to find any patterns.
+
+```{r churn_analysis3, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+# Calculate Churn Rate per Gender
+# Calculate total number of customers for each gender
+total_customers_gender <- telco_cleaned %>%
+  group_by(Gender) %>%
+  summarize(total_customers = n())
+
+# Calculate Churn Rate for all customers
+churn_rate_all <- telco_cleaned %>%
+  group_by(Gender, Churn_Label) %>%
+  count() %>%
+  left_join(total_customers_gender, by = "Gender") %>%
+  mutate(Customer_proportion = n / total_customers * 100)
+
+# Plot Churn Rate for all customers
+s1 <- ggplot(churn_rate_all,
+       aes(x = factor(Churn_Label, 
+                      labels = c("Didn't Churn", "Churned")), 
+           y = Customer_proportion, 
+           fill = factor(Churn_Label))) +
+  geom_col() +
+  # Facet chart by Gender
+  facet_wrap(~Gender) +
+  geom_text(aes(label = paste0(round(Customer_proportion, 0), "%")),
+            position = position_stack(vjust = 0.5), 
+            color = "black", size = 6) +
+  labs(title = "Churn Rate of Customers by Gender",
+       x = "Churn Label", y = "Percentage of Customers") +
+  scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                    labels = c("Didn't Churn", "Churned"),
+                    guide = FALSE)  +
+        theme(axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18),
+              # increase facet title size
+              strip.text = element_text(size = 16))
+
+# Calculate Churn Rate for Senior Citizens
+# Filter the dataset to include only senior customers
+churned_seniors <- telco_cleaned[telco_cleaned$Senior_Citizen == 1,]
+# Calculate Churn Rate of Senior Citizens
+churn_rate_senior <- churned_seniors %>%
+    group_by(Churn_Label) %>%
+    summarize(Customer_proportion = n() / nrow(churned_seniors) * 100)
+# Plot Churn Rate of Senior Citizen
+s2 <- ggplot(churn_rate_senior,
+             aes(x = factor(Churn_Label, 
+                            labels = c("Didn't Churn", "Churned")), 
+                 y = Customer_proportion, 
+                 fill = factor(Churn_Label))) +
+        geom_col() +
+        labs(title = "Churn Rate of Senior Citizens",
+             x = "Churn Label", y = "Proportion of Customers") +
+          geom_text(aes(label = paste0(round(Customer_proportion, 0), 
+                                       "%")),
+            position = position_stack(vjust = 0.5), 
+            color = "black", size = 6) +
+        scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                    labels = c("Didn't Churn", "Churned"),
+                    guide = FALSE)  +
+        theme(axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18))
+
+# Calculate Churn Rate for those with Dependents
+# Filter the dataset to include only those with dependents
+churned_dependents <- telco_cleaned[telco_cleaned$Dependents == 1,]
+# Calculate Churn Rate of those with dependents
+churn_rate_dependents <- churned_dependents %>%
+    group_by(Churn_Label) %>%
+    summarize(Churn_Rate = n() / nrow(churned_dependents) * 100)
+# Plot Churn Rate of those with dependents
+s3 <- ggplot(churn_rate_dependents,
+             aes(x = factor(Churn_Label, 
+                            labels = c("Didn't Churn", "Churned")), 
+                 y = Churn_Rate, 
+                 fill = factor(Churn_Label))) +
+        geom_col() +
+        labs(title = "Churn Rate of of those with Dependents",
+             x = "Churn Label", y = "Percentage of Customers") +
+          geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+            position = position_stack(vjust = 0.5), 
+            color = "black", size = 6) +
+        scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                    labels = c("Didn't Churn", "Churned"),
+                    guide = FALSE)  +
+        theme(axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18))
+
+# Calculate Churn Rate for those with a Partner
+# Filter the dataset to include only those with a partner
+churned_partner <- telco_cleaned[telco_cleaned$Partner == 1,]
+# Calculate Churn Rate of those with a partner
+churn_rate_partner <- churned_partner %>%
+    group_by(Churn_Label) %>%
+    summarize(Churn_Rate = n() / nrow(churned_partner) * 100)
+# Plot Churn Rate of those with a partner
+s4 <- ggplot(churn_rate_partner,
+             aes(x = factor(Churn_Label, 
+                            labels = c("Didn't Churn", "Churned")), 
+                 y = Churn_Rate, 
+                 fill = factor(Churn_Label))) +
+        geom_col() +
+        labs(title = "Churn Rate of of those with a Partner",
+             x = "Churn Label", y = "Percentage of Customers") +
+          geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+            position = position_stack(vjust = 0.5), 
+            color = "black", size = 6) +
+        scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                    labels = c("Didn't Churn", "Churned"),
+                    guide = FALSE)  +
+        theme(axis.text = element_text(size = 14),
+              axis.title = element_text(size = 16),
+              plot.title = element_text(size = 18))
+# Print charts
+grid.arrange(s1, s2, s3, s4, ncol = 2)
+```
+
+Gender doesn't seem to affect churn rate, but seniors and individuals living with partners are more inclined to churn. Prioritizing retention efforts for these groups is essential.
+
+### Are there specific products or services associated with higher churn rates?
+
+It is time to look at the churn rates for specific services, to find any patterns.
+
+```{r churn_analysis4, message=FALSE, warning=FALSE, fig.height=12, fig.width=12}
+churn_rate_by_Phone_Service <- telco_cleaned %>%
+    group_by(Phone_Service) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+churn_rate_by_Multiple_Lines <- telco_cleaned %>%
+    group_by(Multiple_Lines) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+churn_rate_by_Online_Security <- telco_cleaned %>%
+    group_by(Online_Security) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+churn_rate_by_Online_Backup <- telco_cleaned %>%
+    group_by(Online_Backup) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+churn_rate_by_Device_Protection <- telco_cleaned %>%
+    group_by(Device_Protection) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+churn_rate_by_Tech_Support <- telco_cleaned %>%
+    group_by(Tech_Support) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+churn_rate_by_Streaming_TV <- telco_cleaned %>%
+    group_by(Streaming_TV) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+churn_rate_by_Streaming_Movies <- telco_cleaned %>%
+    group_by(Streaming_Movies) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+churn_rate_by_Paperless_Billing <- telco_cleaned %>%
+    group_by(Paperless_Billing) %>%
+    summarize(Churn_Rate = mean(Churn_Label) * 100)
+# Create a bar plot to visualize churn rates of those with phone service
+p1 <- ggplot(churn_rate_by_Phone_Service, 
+             aes(x = as.factor(Phone_Service), y = Churn_Rate, 
+                 fill = as.factor(Phone_Service))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Phone Service", 
+         x = "Use Phone Service", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Create a bar plot to visualize churn rates of those with multiple lines
+p2 <- ggplot(churn_rate_by_Multiple_Lines, 
+             aes(x = as.factor(Multiple_Lines), y = Churn_Rate, 
+                 fill = as.factor(Multiple_Lines))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Multiple Lines", 
+         x = "Use  Multiple_Lines", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Create a bar plot to visualize churn rates of those with online security
+p3 <- ggplot(churn_rate_by_Online_Security, 
+             aes(x = as.factor(Online_Security), y = Churn_Rate, 
+                 fill = as.factor(Online_Security))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Online Security", 
+         x = "Use Online Security", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Create a bar plot to visualize churn rates of those with online backup
+p4 <- ggplot(churn_rate_by_Online_Backup, 
+             aes(x = as.factor(Online_Backup), y = Churn_Rate, 
+                 fill = as.factor(Online_Backup))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Online Backup", 
+         x = "Use Online Backup", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Create a bar plot to visualize churn rates of those with device protection
+p5 <- ggplot(churn_rate_by_Device_Protection, 
+             aes(x = as.factor(Device_Protection), y = Churn_Rate, 
+                 fill = as.factor(Device_Protection))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Device Protection", 
+         x = "Use Device Protection", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Create a bar plot to visualize churn rates of those with tech support
+p6 <- ggplot(churn_rate_by_Tech_Support, 
+             aes(x = as.factor(Tech_Support), y = Churn_Rate, 
+                 fill = as.factor(Tech_Support))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Tech Support", 
+         x = "Use tech support", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Create a bar plot to visualize churn rates of that stream TV
+p7 <- ggplot(churn_rate_by_Streaming_TV, 
+             aes(x = as.factor(Streaming_TV), y = Churn_Rate, 
+                 fill = as.factor(Streaming_TV))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Stream TV", 
+         x = "Get to Stream TV", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Create a bar plot to visualize churn rates of that stream Movies
+p8 <- ggplot(churn_rate_by_Streaming_Movies, 
+             aes(x = as.factor(Streaming_Movies), y = Churn_Rate, 
+                 fill = as.factor(Streaming_Movies))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Stream Movies", 
+         x = "Get to Stream Movies", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Create a bar plot to visualize churn rates of with Paperless billing
+p9 <- ggplot(churn_rate_by_Paperless_Billing, 
+             aes(x = as.factor(Paperless_Billing), y = Churn_Rate, 
+                 fill = as.factor(Paperless_Billing))) +
+    geom_col() +
+    geom_text(aes(label = paste0(round(Churn_Rate, 0), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "black", size = 6) +
+    labs(title = "Paperless Billing", 
+         x = "Get Paperless Billing", 
+         y = "Churn Rate") +    
+    scale_fill_manual(values = c("0" = "lightblue", "1" = "red"),
+                      labels = c("0" = "No", "1" = "Yes")) +
+    scale_x_discrete(labels = c("0" = "No", "1" = "Yes")) +
+    theme(legend.position = "none",
+		  axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+# Print charts
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, ncol = 3)
+```
+
+Customers that don't subscribe to Online Security, tech support and those that subscribe to have paperless billing are more likely to churn. By addressing customer pain points associated with these services, the rate of churn could be reduced.
+
+### Can we predict which customers are likely to churn in the near future?
+
+To predict customer churn, machine learning algorithms will be employed. Due to the nature of the data, a logistic regression model and a classification decision tree model will be constructed and assessed to determine the most best algorithm for the task.
+
+```{r churn_analysis5, message=FALSE, warning=FALSE, fig.height=6, fig.width=6}
+# Set seed for reproducibility
+set.seed(123)
+# Split data on Churn Label into 70% for training, 30% for testing
+data_split <- initial_split(telco_cleaned, prop = 0.7, strata = Churn_Label)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+# Build a logistic regression model for probabilities
+churn_model <- glm(Churn_Label ~ .,
+                   data = train_data,
+                   family = "binomial")
+# Predict churn probabilities on the test set
+churn_probabilities <- predict(churn_model, 
+                               newdata = test_data, 
+                               type = "response")
+# Evaluate model performance using ROC curve
+roc <- roc(test_data$Churn_Label, churn_probabilities)
+plot(roc, main = "ROC Curve")
+# Set threshold value
+threshold <- 0.5
+# Convert churn probabilities to binary predictions (0 or 1) based on threshold value set above
+predicted_churn <- ifelse(churn_probabilities >= threshold, 1, 0)
+# Compare predicted churn with actual churn in the test set
+confusion_matrix <- table(predicted_churn, test_data$Churn_Label)
+# Calculate accuracy, precision, and recall using confusion matrix
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+# Precision = True Positives / (True Positives + False Positives)
+precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+# Recall = True Positives / (True Positives + False Negatives)
+recall <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+```
+
+AUC (Area Under Curve) is close to 1, and the Logistic Regression Model Performance of:
+
+-   Accuracy of `r paste0(round(accuracy, 3) * 100)`%,
+
+-   Precision of `r paste0(round(precision, 3) * 100)`%, and
+
+-   Recall of `r paste0(round(recall, 3) * 100)`%,
+
+indicate the model performance is quite good and acceptable.
+
+```{r, churn_classification, fig.height=6, fig.width=6, warning=FALSE, message=FALSE}
+# Set seed for reproducibility
+set.seed(123)
+# Build a Decision Tree model for classification
+churn_tree <- rpart(Churn_Label ~ ., 
+                    data = train_data, 
+                    method = "class")
+# Predict probabilities on the test set
+churn_probabilities <- predict(churn_tree, 
+                               newdata = test_data, 
+                               type = "prob")[, 2]
+# Create a prediction object
+pred <- prediction(churn_probabilities, test_data$Churn_Label)
+# Calculate gain chart
+gain <- performance(pred, "tpr", "fpr")
+# Plot gain chart
+plot(gain, main = "Gain Chart for Decision Tree Model")
+# Evaluate model performance using a confusion matrix
+tree_confusion_matrix <- table(churn_probabilities, test_data$Churn_Label)
+# Calculate accuracy = True Positives / (All Observations)
+accuracy2 <- sum(diag(tree_confusion_matrix)) / sum(tree_confusion_matrix)
+# Calculate Precision = True Positives / (True Positives + False Positives)
+precision2 <- tree_confusion_matrix[2, 2] / sum(tree_confusion_matrix[, 2])
+# Calculate Recall = True Positives / (True Positives + False Negatives)
+recall2 <- tree_confusion_matrix[2, 2] / sum(tree_confusion_matrix[2, ])    
+```
+
+The Gain chart and the Decision Tree Model Performance of:
+
+-   Accuracy of `r paste0(round(accuracy2, 3) * 100)`%,
+
+-   Precision of `r paste0(round(precision2, 3) * 100)`%, and
+
+-   Recall of `r paste0(round(recall2, 3) * 100)`%,
+
+all combine to indicate a poor and unacceptable performance.
+
+Therefore, in order to predict which customers will churn in the feature, the logistic regression model is the model of choice.
+
+------------------------------------------------------------------------
+
+# Limitations
+
+1.  The analysis couldn't explore customer reasons for churning due to the high proportion of missing values for that variable, and as such, the insights into the specific motivations or pain points driving churn remain limited. This missing information could potentially lead to an incomplete understanding of the underlying factors contributing to customer attrition and might hinder the development of targeted strategies to address these issues effectively.
+
+2.  The data does not consider temporal trends that could affect churn rates over time. This is especially important because customer preferences and behaviors could change over time, so conclusions drawn from historical data might not be applicable to the future.
+
+3.  Logistic regression and decision tree models make certain assumptions about data distribution and relationships, and any violation of these assumptions could affect the validity of the analysis.
+
+# Conclusion
+
+1.  It is important to improve customer retention strategies that target the specific customers with high churn rate through personalized communication, improved customer service and ensuring the quality and reliability of services, leading to an improved customer satisfaction rate which could result in a low churn rate.
+
+2.  Offering loyalty programs, such as rewards, discounts, and exclusive benefits, to new customers can incentivize them to remain engaged and continue utilizing products and services.
+
+3.  It is important to implement an exit survey conducted for churned customers to include not only reasons for leaving, but also customer satisfaction ratings on services, which can provide insights into why they left, to guide strategies to address common pain points.
