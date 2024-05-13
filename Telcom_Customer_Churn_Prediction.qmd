@@ -2,7 +2,7 @@
 title: "Churn Analysis"
 subtitle: "On IBM Telco Data" 
 author: "Aliyu Atiku Mustapha"
-date: "2023-10-24"
+date: "2024-05-09"
 format:
   html:
     toc: true
@@ -16,26 +16,34 @@ format:
       body-width: 1050px
       sidebar-width: 250px
       margin-width:	200px
-    include-in-header:
-      - file: github-corner.html
 editor: visual
 theme:
   light: flatly
   dark: darkly
 ---
 
-# Churn Analysis on IBM Telco Customer Data[^1]
+# Churn Analysis on IBM Telco Customer Data
 
-[^1]: Click the GitHub icon on the top right corner of the page to view all the project files including the dataset.
+The purpose of this analysis is to answer 5 business questions using the IBM Telco Dataset.
 
-## IBM Telco Data
+1.  What is the distribution of churn among all customers?
+
+2.  Can we identify patterns or behaviors that precede customer churn?
+
+3.  Which customer segments have the highest churn rates?
+
+4.  Are there specific products or services associated with higher churn rates?
+
+5.  Can we predict which customers are likely to churn in the near future?
+
+## The Data
 
 The data is from a fictional telco company that provided home phone and Internet services to 7043 customers in California in Q3 The data has 7043 measurements of 33 different variables.
 
 The dataset is available on [Kaggle](https://www.kaggle.com/datasets/yeanzc/telco-customer-churn-ibm-dataset). The data has the following columns and their descriptions:
 
 | Column Name       | Column Description                                                                                                                                                                                          |
-|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|------------------|------------------------------------------------------|
 | CustomerID        | A unique ID that identifies each customer                                                                                                                                                                   |
 | Count             | A value used in reporting/dashboarding to sum up the number of customers in a filtered set                                                                                                                  |
 | Country           | The country of the customer’s primary residence                                                                                                                                                             |
@@ -80,8 +88,6 @@ library(readxl)
 library(rsample)
 # Load naniar package for imputation
 library(naniar)
-# Load corrplot package for correlation plot
-library(corrplot)
 # Load gridExtra package for combining plots
 library(gridExtra)
 # Load gbm package for Logistic regression modeling
@@ -219,49 +225,150 @@ CustomerID is removed because it doesn't provide insights into churning behavior
 
 ------------------------------------------------------------------------
 
-# Churn Analysis
-
-The purpose of this analysis is to answer 5 business questions using the IBM Telco Dataset.
-
-1.  What is the distribution of churn among all customers?
-
-2.  Can we identify patterns or behaviors that precede customer churn?
-
-3.  Which customer segments have the highest churn rates?
-
-4.  Are there specific products or services associated with higher churn rates?
-
-5.  Can we predict which customers are likely to churn in the near future?
+# Exploratory Analysis
 
 To take advantage of the geospatial information present in the Telco data, it will be beneficial to visualize the churn data on a map before analysis. This can help identify clusters of high or low churn rates, revealing regional patterns in customer behavior or service quality, thus providing valuable insights.
 
+### Churn Map
+
 ```{r churn_map, message=FALSE, warning=FALSE}
-# Filter the dataset to include only churned customers
-churned_customers <- telco_data[telco_data$`Churn Label` == "Yes",]
-leaflet(data = churned_customers) %>%
-    addTiles() %>%  # Add default OpenStreetMap tiles as basemap
-    addCircleMarkers(
-        ~Longitude, ~Latitude,  # Specify Longitude and Latitude columns
-        radius = 1,  # Adjust the radius of the bubbles as needed
-        color = "red",  # Set color of the bubbles to red
-        fillOpacity = 0.2,  # Adjust the opacity of the bubbles
-        # Display in popup
-        popup = ~paste("City:", City,
-                       "<br>Zip Code:", `Zip Code`,
-                       "<br>Gender:", Gender,
-                       "<br>Senior Citizen:", `Senior Citizen`,
-                       "<br>Partner:", Partner,
-                       "<br>Dependents:", Dependents,
-                       "<br>Tenure Months:", `Tenure Months`),
-        # Display CustomerID as label on markers
-        label = ~CustomerID) %>%
-    addLegend(
-        "bottomleft",  # Position of the legend
-        colors = "red",  # Color for the legend
-        labels = "Churned",  # Label for the legend
-        title = "Churn Label"  # Title for the legend
-    )
+telco_data_grouped <- telco_data %>%
+    group_by(`Churn Label`) %>%
+    mutate(`Churn Label` = as.factor(`Churn Label`))
+
+# Create two separate groups for churned and non-churned customers
+non_churned_markers <- telco_data_grouped %>%
+    filter(`Churn Label` == "No")
+
+churned_markers <- telco_data_grouped %>%
+    filter(`Churn Label` == "Yes")
+
+# Plotting data on Leaflet map
+leaflet() %>%
+    addTiles() %>%
+  # Add first markers for non-churned customers
+    addCircleMarkers(data = non_churned_markers,
+                     ~Longitude, ~Latitude,
+                     radius = 3,
+                     color = "blue",
+                     fillOpacity = 0.2,
+                     stroke = FALSE,
+                     popup = ~paste("City:", City,
+                                    "<br>Zip Code:", `Zip Code`,
+                                    "<br>Gender:", Gender,
+                                    "<br>Senior Citizen:", `Senior Citizen`,
+                                    "<br>Partner:", Partner,
+                                    "<br>Dependents:", Dependents,
+                                    "<br>Tenure Months:", `Tenure Months`),
+                     label = ~CustomerID,
+                     # Group non-churned markers
+                     group = "Not Churned") %>%
+  # Add second markers for churned customers
+    addCircleMarkers(data = churned_markers, 
+                     ~Longitude, ~Latitude,
+                     radius = 3,
+                     color = "red",
+                     fillOpacity = 0.2,
+                     stroke = FALSE,
+                     popup = ~paste("City:", City,
+                                    "<br>Zip Code:", `Zip Code`,
+                                    "<br>Gender:", Gender,
+                                    "<br>Senior Citizen:", `Senior Citizen`,
+                                    "<br>Partner:", Partner,
+                                    "<br>Dependents:", Dependents,
+                                    "<br>Tenure Months:", `Tenure Months`),
+                     label = ~CustomerID,
+                     # Group churned markers
+                     group = "Churned") %>%
+  # Add layers control for interactive legend
+    addLayersControl(overlayGroups = c("Churned", "Not Churned"),
+                     position = "bottomleft",
+                     options = layersControlOptions(
+                       collapsed = FALSE)) %>% # Expand the control
+  # Add Legend to the bottomleft of the map
+    addLegend("bottomleft",
+              colors = c("red", "blue"), # Legend colors
+              labels = c("Churned", "Not Churned"), # Legend labels
+              title = "Churn Label")
+
 ```
+
+It appears that both types of customers are concentrated around the major cities.
+
+### Tenure Distribution of Customers
+
+```{r tenure_dist, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+ggplot(telco_cleaned, aes(x = Tenure_Months)) +
+    geom_histogram(binwidth = 1,
+                   fill = "blue",
+                   color = "black") +
+    labs(title = "Tenure Distribution of Customers",
+         x = "Tenure in Months", y = "Number of Customers") +
+    theme(axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+```
+
+Customers tend to either stay for a brief period or remain loyal for an extended duration.
+
+### Customer Contract Preference
+
+```{r contract, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+ggplot(telco_cleaned, aes(x = Contract, fill = Contract)) +
+    geom_bar() +
+    labs(title = "Customer Contract Preference of Customers",
+         x = "Contract Type", y = "Number of Customers") +
+    theme(legend.position = "none",
+          axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+```
+
+Customers prefer a month-to-month contract.
+
+### Payment Preference
+
+```{r payment, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+ggplot(telco_cleaned, aes(x = Payment_Method, fill = Payment_Method)) +
+    geom_bar() +
+    labs(title = "Method of Payment Preferred by Customers",
+         x = "Payment Method", y = "Number of Customers") +
+    theme(legend.position = "none",
+          axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16),
+          plot.title = element_text(size = 18))
+
+```
+
+Most customers prefer to pay by electronic check.
+
+### Average Charges per Contract
+
+```{r avg_contract, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+telco_cleaned %>%
+    group_by(Contract) %>%
+    summarise(Avg_Monthly_Charge = round(mean(Monthly_Charges),2),
+              Avg_Total_Charge = round(mean(Total_Charges),2)) %>%
+    datatable()
+```
+
+Even though customers on monthly contracts tend to pay the highest average monthly charge, those on 2 year contracts accumulate higher total charges over time.
+
+### Average Charges per Payment Method
+
+```{r avg_payment, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+telco_cleaned %>%
+    group_by(Payment_Method) %>%
+    summarise(Avg_Monthly_Charge = round(mean(Monthly_Charges),2),
+              Avg_Total_Charge = round(mean(Total_Charges),2)) %>%
+    datatable()
+```
+
+Payment by electronic checks tend to have higher average monthly charges, customers that pay by automatic bank transfer accumulate higher total charges over time.
+
+# Churn Analysis
+
+The 5 Business questions will now be answered by examining the dataset.
 
 ### What is the distribution of churn among all customers?
 
@@ -290,7 +397,7 @@ ggplot(churn_rate, aes(x = factor(Churn_Label,
               plot.title = element_text(size = 18))
 ```
 
-`r churn_rate[2, 2]` customers have churned resulting in a churn rate of approximately `r churn_rate[2, 3]`%, which is considerably high.
+Approximately `r churn_rate[2, 2]` customers have churned resulting in a churn rate of `r churn_rate[2, 3]`%, which is considerably high. However, the dataset still contains a larger number of non-churned customers.
 
 ### Can we identify patterns or behaviors that precede customer churn?
 
@@ -761,13 +868,9 @@ Therefore, in order to predict which customers will churn in the feature, the lo
 
 ------------------------------------------------------------------------
 
-# Limitations
+# Limitation
 
-1.  The analysis couldn't explore customer reasons for churning due to the high proportion of missing values for that variable, and as such, the insights into the specific motivations or pain points driving churn remain limited. This missing information could potentially lead to an incomplete understanding of the underlying factors contributing to customer attrition and might hinder the development of targeted strategies to address these issues effectively.
-
-2.  The data does not consider temporal trends that could affect churn rates over time. This is especially important because customer preferences and behaviors could change over time, so conclusions drawn from historical data might not be applicable to the future.
-
-3.  Logistic regression and decision tree models make certain assumptions about data distribution and relationships, and any violation of these assumptions could affect the validity of the analysis.
+The analysis couldn't explore customer reasons for churning due to the high proportion of missing values for that variable, and as such, the insights into the specific motivations or pain points driving churn remain limited. This missing information could potentially lead to an incomplete understanding of the underlying factors contributing to customer attrition and might hinder the development of targeted strategies to address these issues effectively.
 
 # Conclusion
 
@@ -776,3 +879,5 @@ Therefore, in order to predict which customers will churn in the feature, the lo
 2.  Offering loyalty programs, such as rewards, discounts, and exclusive benefits, to new customers can incentivize them to remain engaged and continue utilizing products and services.
 
 3.  It is important to implement an exit survey conducted for churned customers to include not only reasons for leaving, but also customer satisfaction ratings on services, which can provide insights into why they left, to guide strategies to address common pain points.
+
+[Link to Github](https://github.com/alatiku/ChurnAnalysis "This link will take you to the github page hosting the files for this project")
