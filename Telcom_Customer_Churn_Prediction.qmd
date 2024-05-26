@@ -5,24 +5,31 @@ author: "Aliyu Atiku Mustapha"
 date: "2024-05-09"
 format:
   html:
+    embed-resources: true
     toc: true
     toc_float: true
     toc-location: left
     toc_depth: 3
     number_sections: true
     code-fold: true
+    code-overflow: "wrap"
     code-summary: "Click to show code"
     grid:
       body-width: 1050px
       sidebar-width: 250px
       margin-width:	200px
-editor: visual
+execute:
+  message: false
+  warning: false
+fig-height: 6
+fig-width: 10
+fig-align: "center"
 theme:
   light: flatly
   dark: darkly
 ---
 
-# Churn Analysis on IBM Telco Customer Data
+# Introduction
 
 The purpose of this analysis is to answer 5 business questions using the IBM Telco Dataset.
 
@@ -36,14 +43,14 @@ The purpose of this analysis is to answer 5 business questions using the IBM Tel
 
 5.  Can we predict which customers are likely to churn in the near future?
 
-## The Data
+## IBM Telco Customer Data
 
 The data is from a fictional telco company that provided home phone and Internet services to 7043 customers in California in Q3 The data has 7043 measurements of 33 different variables.
 
 The dataset is available on [Kaggle](https://www.kaggle.com/datasets/yeanzc/telco-customer-churn-ibm-dataset). The data has the following columns and their descriptions:
 
 | Column Name       | Column Description                                                                                                                                                                                          |
-|------------------|------------------------------------------------------|
+|-------------------|-----------------------------------------------------|
 | CustomerID        | A unique ID that identifies each customer                                                                                                                                                                   |
 | Count             | A value used in reporting/dashboarding to sum up the number of customers in a filtered set                                                                                                                  |
 | Country           | The country of the customer’s primary residence                                                                                                                                                             |
@@ -110,13 +117,8 @@ theme_set(theme_minimal())
 
 ## Data Loading
 
-```{r, read_files, message=FALSE, warning=FALSE}
+```{r, read_files}
 telco_data <- read_excel("Telco_customer_churn_data.xlsx")
-```
-
-The telco dataset has `r nrow(telco_data)` rows. Lets view the data to understand its structure and composition.
-
-```{r, display_data, message=FALSE, warning=FALSE}
 # Display the first 500 rows of imported data
 datatable(
   telco_data[1:500,],
@@ -127,11 +129,17 @@ datatable(
                  scrollX = TRUE))
 ```
 
+The telco dataset has `r nrow(telco_data)` rows. Lets view the data to understand its structure and composition.
+
 ## Data Properties
 
 To understand the data composition, the class of each variable together with the number and proportion of missing values for each variable will provide a deeper insight to the data structure and how it could be useful for analysis.
 
-```{r data_str, message=FALSE, warning=FALSE}
+```{r data_str}
+# Visualize missing data
+gg_miss_var(telco_data) + theme(text = element_text(size = 14),
+                               axis.text.x = element_text(size = 12),
+                               axis.text.y = element_text(size = 12))
 # Check for class of each variable
 class_table <- sapply(telco_data, class)
 class_table <- data.frame(
@@ -139,17 +147,16 @@ class_table <- data.frame(
   Class = as.character(class_table),
   stringsAsFactors = FALSE)
 # Check for the proportion of missing values in full data
-x <- data.frame(miss = colSums(is.na(telco_data)), 
-             prop = round((colSums(is.na(telco_data)) / nrow(telco_data)) * 100, 
-                           2))
-properties <- cbind(class_table,
-                    Values_missing = x[, 1],
-                    Proportion_missing = x[, 2])
+x <- miss_var_summary(telco_data)
+# Rename the columns 
+colnames(x) <- c("Variable", "Values_missing", "Proportion_missing")
+# Round the Proportion_missing column to 2 decimal points
+x$Proportion_missing <- round(x$Proportion_missing, 2)
+# Combine data frames on the "Variable" column
+properties <- merge(class_table, x, by = "Variable")
 # Display the properties of the data
 datatable(
   properties,
-  options = list(pageLength = 33,
-                 scrollY = "500px"),
   caption = "Table displaying the properties of the data.")
 ```
 
@@ -161,7 +168,7 @@ Imputing by the mean on a small number of missing values (11 rows to be precise)
 
 ## Data Cleaning and Processing
 
-```{r clean_data, message=FALSE, warning=FALSE}
+```{r clean_data}
 # Step 1: Drop non-required variables in data
 telco_cleaned <- telco_data %>%
   select(
@@ -231,7 +238,7 @@ To take advantage of the geospatial information present in the Telco data, it wi
 
 ### Churn Map
 
-```{r churn_map, message=FALSE, warning=FALSE}
+```{r churn_map}
 telco_data_grouped <- telco_data %>%
     group_by(`Churn Label`) %>%
     mutate(`Churn Label` = as.factor(`Churn Label`))
@@ -297,7 +304,7 @@ It appears that both types of customers are concentrated around the major cities
 
 ### Tenure Distribution of Customers
 
-```{r tenure_dist, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+```{r tenure_dist}
 ggplot(telco_cleaned, aes(x = Tenure_Months)) +
     geom_histogram(binwidth = 1,
                    fill = "blue",
@@ -313,7 +320,7 @@ Customers tend to either stay for a brief period or remain loyal for an extended
 
 ### Customer Contract Preference
 
-```{r contract, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+```{r contract}
 ggplot(telco_cleaned, aes(x = Contract, fill = Contract)) +
     geom_bar() +
     labs(title = "Customer Contract Preference of Customers",
@@ -328,7 +335,7 @@ Customers prefer a month-to-month contract.
 
 ### Payment Preference
 
-```{r payment, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+```{r payment}
 ggplot(telco_cleaned, aes(x = Payment_Method, fill = Payment_Method)) +
     geom_bar() +
     labs(title = "Method of Payment Preferred by Customers",
@@ -344,7 +351,7 @@ Most customers prefer to pay by electronic check.
 
 ### Average Charges per Contract
 
-```{r avg_contract, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+```{r avg_contract}
 telco_cleaned %>%
     group_by(Contract) %>%
     summarise(Avg_Monthly_Charge = round(mean(Monthly_Charges),2),
@@ -356,7 +363,7 @@ Even though customers on monthly contracts tend to pay the highest average month
 
 ### Average Charges per Payment Method
 
-```{r avg_payment, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+```{r avg_payment}
 telco_cleaned %>%
     group_by(Payment_Method) %>%
     summarise(Avg_Monthly_Charge = round(mean(Monthly_Charges),2),
@@ -372,7 +379,7 @@ The 5 Business questions will now be answered by examining the dataset.
 
 ### What is the distribution of churn among all customers?
 
-```{r churn_analysis1, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+```{r churn_analysis1}
 # Churn Distribution
 churn_rate <- telco_cleaned %>%
     count(Churn_Label) %>%
@@ -403,7 +410,7 @@ Approximately `r churn_rate[2, 2]` customers have churned resulting in a churn r
 
 To do that, the data needs to only include churned customers, by focusing solely on this subset, further analysis can reveal which factors are uniquely associated with churn.
 
-```{r churn_analysis2, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+```{r churn_analysis2, fig.height=8, fig.width=12}
 # Create a subset of data for customers who churned
 churned_customers <- telco_cleaned %>%
     filter(Churn_Label == 1)
@@ -460,7 +467,7 @@ From the charts above, it's evident that a significant portion of churned custom
 
 Explore Churn rates across customer demographics, to find any patterns.
 
-```{r churn_analysis3, message=FALSE, warning=FALSE, fig.height=8, fig.width=12}
+```{r churn_analysis3, fig.height=8, fig.width=12}
 # Calculate Churn Rate per Gender
 # Calculate total number of customers for each gender
 total_customers_gender <- telco_cleaned %>%
@@ -585,7 +592,7 @@ Gender doesn't seem to affect churn rate, but seniors and individuals living wit
 
 It is time to look at the churn rates for specific services, to find any patterns.
 
-```{r churn_analysis4, message=FALSE, warning=FALSE, fig.height=12, fig.width=12}
+```{r churn_analysis4, fig.height=12, fig.width=12}
 churn_rate_by_Phone_Service <- telco_cleaned %>%
     group_by(Phone_Service) %>%
     summarize(Churn_Rate = mean(Churn_Label) * 100)
@@ -785,7 +792,7 @@ Customers that don't subscribe to Online Security, tech support and those that s
 
 To predict customer churn, machine learning algorithms will be employed. Due to the nature of the data, a logistic regression model and a classification decision tree model will be constructed and assessed to determine the most best algorithm for the task.
 
-```{r churn_analysis5, message=FALSE, warning=FALSE, fig.height=6, fig.width=6}
+```{r churn_analysis5}
 # Set seed for reproducibility
 set.seed(123)
 # Split data on Churn Label into 70% for training, 30% for testing
@@ -827,7 +834,7 @@ AUC (Area Under Curve) is close to 1, and the Logistic Regression Model Performa
 
 indicate the model performance is quite good and acceptable.
 
-```{r, churn_classification, fig.height=6, fig.width=6, warning=FALSE, message=FALSE}
+```{r, churn_classification}
 # Set seed for reproducibility
 set.seed(123)
 # Build a Decision Tree model for classification
